@@ -25,3 +25,9 @@ func TestScannerError(t *testing.T) {
 	test.Equals(t, printer.ScannerError("/path", errors.New("error \"message\"")), nil)
 	test.Equals(t, []string{"scan: error \"message\"\n"}, term.Errors)
 }
+
+func TestExcludedItem(t *testing.T) {
+	term, printer := createTextProgress()
+	printer.ExcludedItem("/p\nath")
+	test.Equals(t, []string{"excluded \"/p\\nath\""}, term.Output)
+}
