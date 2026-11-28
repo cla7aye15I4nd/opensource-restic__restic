@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"math/bits"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"golang.org/x/text/width"
 
@@ -144,6 +147,71 @@ func Quote(line string) string {
 		}
 	}
 	return line
+}
+
+// QuoteSlice quotes elements that contain terminal control characters.
+// Elements that are already safe to print are left unchanged.
+func QuoteSlice(vals []string) []string {
+	out := make([]string, len(vals))
+	for i, v := range vals {
+		out[i] = Quote(v)
+	}
+	return out
+}
+
+// EscapeControls replaces terminal control characters with escape sequences.
+// Newlines and tabs are preserved so multi-line messages keep their layout.
+// Runes use JSON-compatible \uXXXX (and UTF-16 surrogate pair) escapes
+// so JSON output remains valid and decodes identically.
+func EscapeControls(s string) string {
+	if !hasTerminalControl(s) {
+		return s
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			fmt.Fprintf(&b, `\x%02x`, s[i])
+			i++
+			continue
+		}
+		if !terminalControl(r) {
+			b.WriteRune(r)
+		} else if r <= 0xffff {
+			fmt.Fprintf(&b, `\u%04x`, r)
+		} else {
+			r1, r2 := utf16.EncodeRune(r)
+			fmt.Fprintf(&b, `\u%04x\u%04x`, r1, r2)
+		}
+		i += size
+	}
+	return b.String()
+}
+
+func hasTerminalControl(s string) bool {
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if (r == utf8.RuneError && size == 1) || terminalControl(r) {
+			return true
+		}
+		i += size
+	}
+	return false
+}
+
+// terminalControl reports whether r can change terminal state or modify
+// rendering. Newlines and tabs are kept to allow multi-line messages.
+//
+// Matched runes are C0 and C1 controls (category Cc, including DEL) and
+// format characters (category Cf: bidi controls, zero-width characters,
+// tags).
+func terminalControl(r rune) bool {
+	if r == '\n' || r == '\t' {
+		return false
+	}
+	return unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
 }
 
 // Truncate s to fit in width (number of terminal cells) w.

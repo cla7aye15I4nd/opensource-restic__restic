@@ -1,0 +1,13 @@
+Bugfix: Quote non-printable characters in text output
+
+Filenames and other printed text, such as hostnames, tags, and error
+messages, could contain newlines or terminal control characters. Restic
+printed many of those strings verbatim, which could mangle the status output
+or change the terminal state.
+
+Text output now quotes strings that contain non-printable or invalid UTF-8
+characters. JSON output escapes control and format characters using standard
+JSON escape sequences so it remains valid and decodes identically. The `cat`
+command and `dump` commands still output data verbatim.
+
+https://github.com/restic/restic/pull/22216

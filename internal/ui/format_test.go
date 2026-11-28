@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"encoding/json"
 	"strconv"
+	"strings"
 	"testing"
 
 	rtest "github.com/restic/restic/internal/test"
@@ -127,6 +129,51 @@ func TestQuote(t *testing.T) {
 			rtest.Equals(t, c.in, Quote(c.in))
 		}
 	}
+}
+
+func TestQuoteSlice(t *testing.T) {
+	in := []string{"ok", "a\nb", "plain"}
+	rtest.Equals(t, []string{"ok", strconv.Quote("a\nb"), "plain"}, QuoteSlice(in))
+	rtest.Equals(t, "a\nb", in[1])
+	rtest.Equals(t, []string{}, QuoteSlice(nil))
+}
+
+func TestEscapeControlsKeepsLayout(t *testing.T) {
+	in := "PID 1 on host\n\tstack"
+	rtest.Equals(t, in, EscapeControls(in))
+	rtest.Equals(t, "bell \\u0007\nnext", EscapeControls("bell \a\nnext"))
+	rtest.Equals(t, "esc \\u001b[2J", EscapeControls("esc \x1b[2J"))
+	rtest.Equals(t, "del \\u007f", EscapeControls("del \x7f"))
+	rtest.Equals(t, "c1 \\u009b2J", EscapeControls("c1 \u009b2J"))
+	rtest.Equals(t, "tag \\udb40\\udc67", EscapeControls("tag \U000e0067"))
+	rtest.Equals(t, "bad \\xff", EscapeControls("bad \xff"))
+	rtest.Equals(t, "repl \uFFFD", EscapeControls("repl \uFFFD"))
+	rtest.Equals(t, "nbsp \u00a0", EscapeControls("nbsp \u00a0"))
+	rtest.Equals(t, "pua \ue000", EscapeControls("pua \ue000"))
+	rtest.Equals(t, "zwj \\u200d", EscapeControls("zwj \u200d"))
+	rtest.Equals(t, "sep \u2028\u2029", EscapeControls("sep \u2028\u2029"))
+	rtest.Equals(t, "{\"hostname\":\"ok\"}\n", EscapeControls("{\"hostname\":\"ok\"}\n"))
+}
+
+func TestEscapeControlsJSONRoundTrip(t *testing.T) {
+	type payload struct {
+		Value string `json:"value"`
+	}
+	in := payload{
+		Value: "plain \x1b[2J del:\x7f c1:\u009b2J bidi:\u202e zwj:\u200d flag:\U0001f3f4\U000e0067\U000e007f repl:\uFFFD",
+	}
+	raw, err := json.Marshal(in)
+	rtest.OK(t, err)
+
+	escaped := EscapeControls(string(raw))
+	rtest.Assert(t, !strings.ContainsRune(escaped, '\x7f'), "raw DEL in %q", escaped)
+	rtest.Assert(t, !strings.ContainsRune(escaped, '\u009b'), "raw C1 CSI in %q", escaped)
+	rtest.Assert(t, !strings.ContainsRune(escaped, '\u202e'), "raw Bidi RLO in %q", escaped)
+	rtest.Assert(t, !strings.ContainsRune(escaped, '\U000e0067'), "raw non-BMP tag in %q", escaped)
+
+	var decoded payload
+	rtest.OK(t, json.Unmarshal([]byte(escaped), &decoded))
+	rtest.Equals(t, in, decoded)
 }
 
 func TestTruncate(t *testing.T) {

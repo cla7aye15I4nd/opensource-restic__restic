@@ -11,6 +11,7 @@ import (
 
 	tty "github.com/restic/restic/internal/terminal"
 	rtest "github.com/restic/restic/internal/test"
+	"github.com/restic/restic/internal/ui"
 )
 
 func TestSetStatus(t *testing.T) {
@@ -114,6 +115,39 @@ func TestPrint(t *testing.T) {
 
 	<-term.closed
 	rtest.Equals(t, exp, buf.String())
+}
+
+func TestPrintErrorEscapesControls(t *testing.T) {
+	buf, term, cancel := setupStatusTest()
+
+	const (
+		cl   = tty.PosixControlClearLine
+		home = tty.PosixControlMoveCursorHome
+	)
+
+	hostile := "esc \x1b[2J del \x7f c1 \u009b tag \U000e0067 bad \xff"
+	term.Print("out " + hostile)
+	term.Error("err " + hostile)
+	// Newlines and tabs are part of the message layout and must survive.
+	term.Print("keep\n\ttabs")
+	term.Error("already\n")
+
+	exp := home + cl + ui.EscapeControls("out "+hostile+"\n")
+	exp += home + cl + ui.EscapeControls("err "+hostile+"\n")
+	exp += home + cl + "keep\n\ttabs\n"
+	exp += home + cl + "already\n"
+
+	cancel()
+	<-term.closed
+
+	got := buf.String()
+	rtest.Equals(t, exp, got)
+	// Clear-line uses ESC [2K, so a raw ESC byte is expected. The hostile sequence is not.
+	rtest.Assert(t, !strings.Contains(got, "\x1b[2J"), "raw CSI in %q", got)
+	rtest.Assert(t, !strings.ContainsRune(got, '\x7f'), "raw DEL in %q", got)
+	rtest.Assert(t, !strings.ContainsRune(got, '\u009b'), "raw C1 CSI in %q", got)
+	rtest.Assert(t, !strings.ContainsRune(got, '\U000e0067'), "raw tag in %q", got)
+	rtest.Assert(t, !strings.Contains(got, "\xff"), "raw invalid UTF-8 in %q", got)
 }
 
 func TestSanitizeLines(t *testing.T) {
