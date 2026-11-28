@@ -159,7 +159,7 @@ func (s *statefulOutput) PrintPatternJSON(path string, node *data.Node) {
 	if s.hits > 0 {
 		_, _ = s.stdout.Write([]byte(","))
 	}
-	_, _ = s.stdout.Write(b)
+	_, _ = io.WriteString(s.stdout, ui.EscapeControls(string(b)))
 	s.hits++
 }
 
@@ -210,7 +210,7 @@ func (s *statefulOutput) PrintObjectJSON(kind, id, nodepath, treeID string, sn *
 	if s.hits > 0 {
 		_, _ = s.stdout.Write([]byte(","))
 	}
-	_, _ = s.stdout.Write(b)
+	_, _ = io.WriteString(s.stdout, ui.EscapeControls(string(b)))
 	s.hits++
 }
 

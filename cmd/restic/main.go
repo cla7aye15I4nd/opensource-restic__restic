@@ -168,13 +168,14 @@ func printExitError(globalOptions global.Options, code int, message string) {
 			Message:     message,
 		}
 
-		err := json.NewEncoder(os.Stderr).Encode(jsonS)
+		b, err := json.Marshal(jsonS)
 		if err != nil {
 			// ignore error as there's no good way to handle it
 			_, _ = fmt.Fprintf(os.Stderr, "JSON encode failed: %v\n", err)
 			debug.Log("JSON encode failed: %v\n", err)
 			return
 		}
+		_, _ = fmt.Fprintf(os.Stderr, "%s\n", ui.EscapeControls(string(b)))
 	} else {
 		_, _ = fmt.Fprintf(os.Stderr, "%s\n", ui.EscapeControls(message))
 	}

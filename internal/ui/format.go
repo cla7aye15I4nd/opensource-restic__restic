@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"golang.org/x/text/width"
@@ -158,9 +159,10 @@ func QuoteSlice(vals []string) []string {
 	return out
 }
 
-// EscapeControls replaces terminal control characters with Go escape sequences.
+// EscapeControls replaces terminal control characters with escape sequences.
 // Newlines and tabs are preserved so multi-line messages keep their layout.
-// Printable text, including JSON, is returned unchanged.
+// Runes use JSON-compatible \uXXXX (and UTF-16 surrogate pair) escapes
+// so JSON output remains valid and decodes identically.
 func EscapeControls(s string) string {
 	if !hasTerminalControl(s) {
 		return s
@@ -177,9 +179,11 @@ func EscapeControls(s string) string {
 		}
 		if !terminalControl(r) {
 			b.WriteRune(r)
+		} else if r <= 0xffff {
+			fmt.Fprintf(&b, `\u%04x`, r)
 		} else {
-			q := strconv.QuoteRune(r)
-			b.WriteString(q[1 : len(q)-1])
+			r1, r2 := utf16.EncodeRune(r)
+			fmt.Fprintf(&b, `\u%04x\u%04x`, r1, r2)
 		}
 		i += size
 	}

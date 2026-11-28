@@ -169,12 +169,12 @@ foo        2018-08-19 22:22:22  xxx  other  /home/user/other
 				return table
 			},
 			`
-host         tags
------------------
-host\x1b[2J  ok
-             a
-             b
------------------
+host           tags
+-------------------
+host\u001b[2J  ok
+               a
+               b
+-------------------
 `,
 		},
 	}
